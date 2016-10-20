@@ -86,8 +86,8 @@ public class ByteBuffer {
                     }
                 }else if(readStartIndex > writeStartIndex) {
                     //loop stored.
-                    System.arraycopy(data, 0, buffer, writeStartIndex, buffer.length);
-                    writeStartIndex += buffer.length;
+                    System.arraycopy(data, 0, buffer, writeStartIndex, len);
+                    writeStartIndex += len;
                 }else {
                     //readStartIndex == writeStartIndex
                     //can reach here?
@@ -111,8 +111,14 @@ public class ByteBuffer {
                 readStartIndex += obtainSize;
             }else {
                 int tailLen = buffer.length - readStartIndex;
-                System.arraycopy(buffer, readStartIndex, buf, 0, tailLen);
-                System.arraycopy(buffer, 0, buf, tailLen, obtainSize - tailLen);
+                if(obtainSize <= tailLen) {
+                    System.arraycopy(buffer, readStartIndex, buf, 0, obtainSize);
+                    readStartIndex = (readStartIndex + obtainSize) % buffer.length;
+                }else {
+                    System.arraycopy(buffer, readStartIndex, buf, 0, tailLen);
+                    System.arraycopy(buffer, 0, buf, tailLen, obtainSize - tailLen);
+                    readStartIndex = obtainSize - tailLen;
+                }
             }
             return obtainSize;
         }
