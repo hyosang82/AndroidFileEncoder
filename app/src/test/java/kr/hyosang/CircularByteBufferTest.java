@@ -11,10 +11,10 @@ import static org.junit.Assert.*;
  * Created by hyosang on 2016. 10. 16..
  */
 
-public class ByteBufferTest {
+public class CircularByteBufferTest {
     @Test
     public void bufferTest() {
-        ByteBuffer buffer = new ByteBuffer(1024 * 10);
+        CircularByteBuffer buffer = new CircularByteBuffer(1024 * 10);
         assertEquals(1024 * 10, buffer.getRemain());
 
         byte [] test = new byte[1024];
@@ -37,7 +37,7 @@ public class ByteBufferTest {
 
                 System.out.println("STORE " + loop + ", Remain = " + remains);
             }
-        }catch(ByteBuffer.BufferOverflowException e) {
+        }catch(CircularByteBuffer.BufferOverflowException e) {
             System.out.println("FULL : " + e.getMessage());
         }
 

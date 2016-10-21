@@ -1,5 +1,7 @@
 package kr.hyosang;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -7,22 +9,17 @@ import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.os.Build;
-import android.provider.MediaStore;
 import android.util.Log;
 
 import java.io.ByteArrayOutputStream;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.logging.Logger;
 
 /**
  * Created by hyosang on 2016. 10. 13..
  */
 
 public class FileEncoder extends Thread {
-    private ByteArrayOutputStream passingBuffer;
-
     private int findColorFormatForEncoder(String mime) {
         MediaCodecList mediaCodecList = new MediaCodecList(MediaCodecList.ALL_CODECS);
         MediaCodecInfo [] codecInfos = mediaCodecList.getCodecInfos();
@@ -56,7 +53,7 @@ public class FileEncoder extends Thread {
     }
 
     private MediaExtractor mExtractor;
-    private kr.hyosang.ByteBuffer mPassingBuffer;
+    private EncoderBuffer mPassingBuffer;
     private Object mDecoderTrigger = new Object();
     private Object mEncoderTrigger = new Object();
     private MediaMuxer mMuxer;
@@ -95,29 +92,8 @@ public class FileEncoder extends Thread {
             }
 
 
-
-            ByteBuffer readBuffer;
-
-            int readBufferSize = 1024 * 1024;       //Initial size is 1MB
-            int readSize = 0;
-
-            int decoderInputBufferIndex, decoderOutputBufferIndex;
-            int encoderInputBufferIndex, encoderOutputBufferIndex;
-            ByteBuffer decoderInputBuffer, decoderOutputBuffer = null;
-            ByteBuffer encoderInputBuffer, encoderOutputBuffer = null;
-            ByteBuffer passingBuffer = null;
-
-            boolean consumeFileInput = true;
-            boolean fileInputComplete = false;
-            boolean decoderInputComplete = false;
-            boolean encoderInputComplete = false;
-            boolean isLocalEOF = false;
-            boolean isDecoderOutComplete = false;
-            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-            MediaFormat outputBufferFormat;
-
             mMuxer = new MediaMuxer("/mnt/sdcard/encoded.mp4", MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-            MediaFormat encoderFormat = MediaFormat.createVideoFormat("video/avc", 640, 360);
+            MediaFormat encoderFormat = MediaFormat.createVideoFormat("video/avc", 1280, 720);
             encoderFormat.setInteger(MediaFormat.KEY_BIT_RATE, 150000);
             encoderFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar);
             encoderFormat.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
@@ -127,77 +103,13 @@ public class FileEncoder extends Thread {
 
             //mMuxer.start();
 
-            mPassingBuffer = new kr.hyosang.ByteBuffer(10 * 1024 * 1024);
+            mPassingBuffer = new EncoderBuffer(10 * 1024 * 1024);
             mDecoder = new Decoder();
             mEncoder = new EncoderThread();
 
             mDecoder.start();
             mEncoder.start();
 
-
-
-
-
-/*
-            while(true) {
-                //decoder output
-                if(!isDecoderOutComplete) {
-                    decoderOutputBufferIndex = decoder.dequeueOutputBuffer(bufferInfo, 10000);
-                    if (decoderOutputBufferIndex >= 0) {
-                        decoderOutputBuffer = decoder.getOutputBuffer(decoderOutputBufferIndex);
-
-                        //input to encoder
-                        encoderInputBufferIndex = encoder.dequeueInputBuffer(-1);
-                        if(encoderInputBufferIndex >= 0) {
-                            int size = bufferInfo.size;
-                            encoderInputBuffer = encoder.getInputBuffer(encoderInputBufferIndex);
-                            if(encoderInputBuffer.capacity() >= size) {
-                                encoderInputBuffer.put(decoderOutputBuffer);
-                            }else {
-                                size = 0;
-                            }
-                            encoder.queueInputBuffer(encoderInputBufferIndex, 0, size, 0, 0);
-                        }else {
-                            Log.w("TEST", "Encoder input fail!");
-                        }
-
-                    }else if(decoderOutputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                        Log.d("TEST", "Decoder: Output format changed");
-                    }else if(decoderOutputBufferIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
-
-                    }
-
-                    //check if end
-                    if((bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        isDecoderOutComplete = true;
-                    }
-                }
-
-                //encoder output
-                encoderOutputBufferIndex = encoder.dequeueOutputBuffer(bufferInfo, 10_000);
-                if(encoderOutputBufferIndex >= 0) {
-                    encoderOutputBuffer = encoder.getOutputBuffer(encoderOutputBufferIndex);
-
-                    Log.d("TEST", "Encoder output size = " + bufferInfo.size);
-
-                    encoder.releaseOutputBuffer(encoderOutputBufferIndex, false);
-                }else {
-                    Log.w("TEST", "Encoder output fail!");
-                }
-
-                if((bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                    Log.d("TEST", "Encoder out END");
-                    break;
-                }
-            }
-
-            Log.d("TEST", "Complete");
-
-
-            mExtractor.release();
-            encoder.stop();
-            encoder.release();
-            */
 
 
         }catch(IOException e) {
@@ -263,6 +175,7 @@ public class FileEncoder extends Thread {
                                 decoderInputBuffer = decoder.getInputBuffer(decoderInputBufferIndex);
                                 decoderInputBuffer.put(inputBuffer);
                                 decoder.queueInputBuffer(decoderInputBufferIndex, 0, readSize, ts, 0);
+
                             } else {
                                 Log.e("TEST", "Decoder input error = " + decoderInputBufferIndex);
                             }
@@ -272,7 +185,6 @@ public class FileEncoder extends Thread {
 
                             decoderInputBufferIndex = decoder.dequeueInputBuffer(20_000);
                             if(decoderInputBufferIndex >= 0) {
-                                decoderInputBuffer = decoder.getInputBuffer(decoderInputBufferIndex);
                                 decoder.queueInputBuffer(decoderInputBufferIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
                                 isInputEnd = true;
                             }else {
@@ -288,15 +200,21 @@ public class FileEncoder extends Thread {
                         decoderOutputBufferIndex = decoder.dequeueOutputBuffer(bufferInfo, 20_000);
                         if(decoderOutputBufferIndex >= 0) {
                             decoderOutputBuffer = decoder.getOutputBuffer(decoderOutputBufferIndex);
+                            decoderOutputBuffer.get(buf, bufferInfo.offset, bufferInfo.size);
+
+                            MediaFormat format = decoder.getOutputFormat(decoderOutputBufferIndex);
+                            Log.d("TEST", "Color format = " + format.getInteger(MediaFormat.KEY_COLOR_FORMAT));
+
                             //consume output
                             while(!mPassingBuffer.canStore(bufferInfo.size)) {
                                 synchronized(mDecoderTrigger) {
-                                    Log.d("TEST", "Waiting for buffer...");
+                                    //Log.d("TEST", "Waiting for buffer...");
+                                    Log.d("TEST", "locked");
                                     mDecoderTrigger.wait();
+                                    Log.d("TEST", "unlocked");
                                 }
                             }
-                            decoderOutputBuffer.get(buf, bufferInfo.offset, bufferInfo.size);
-                            mPassingBuffer.store(buf, bufferInfo.size);
+                            mPassingBuffer.store(buf, bufferInfo.size, bufferInfo.presentationTimeUs);
 
                             Log.d("TEST", "Decodded : " + totalRead + "/ " + bufferInfo.offset + " ~ " + bufferInfo.size + ", " + bufferInfo.presentationTimeUs);
 
@@ -322,7 +240,7 @@ public class FileEncoder extends Thread {
                 decoder.release();
             }catch(IOException e) {
                 e.printStackTrace();
-            }catch(kr.hyosang.ByteBuffer.BufferOverflowException e) {
+            }catch(CircularByteBuffer.BufferOverflowException e) {
                 e.printStackTrace();
             }catch(InterruptedException e) {
                 e.printStackTrace();
@@ -335,9 +253,9 @@ public class FileEncoder extends Thread {
         public void run() {
             try {
                 MediaCodec encoder = MediaCodec.createEncoderByType("video/avc");
-                MediaFormat encoderFormat = MediaFormat.createVideoFormat("video/avc", 640, 360);
+                MediaFormat encoderFormat = MediaFormat.createVideoFormat("video/avc", 1280, 720);
                 encoderFormat.setInteger(MediaFormat.KEY_BIT_RATE, 150000);
-                encoderFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar);
+                encoderFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar);
                 encoderFormat.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
                 encoderFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 5);
                 encoder.configure(encoderFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -354,17 +272,17 @@ public class FileEncoder extends Thread {
                 byte [] buf = new byte[2 * 1024 * 1024];
                 MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
                 long ts = 0;
+                EncoderBuffer.SampleInfo sampleInfo = new EncoderBuffer.SampleInfo();
 
                 while(true) {
-                    if(mPassingBuffer.getRemain() > 0) {
+                    if(mPassingBuffer.getDataSize() > 0) {
                         encoderInputBufferIndex = encoder.dequeueInputBuffer(20_000);
                         if(encoderInputBufferIndex >= 0) {
                             encoderInputBuffer = encoder.getInputBuffer(encoderInputBufferIndex);
                             size = Math.min(buf.length, Math.min(mPassingBuffer.getRemain(), encoderInputBuffer.capacity()));
-                            mPassingBuffer.obtain(buf, size);
+                            mPassingBuffer.obtain(buf, size, sampleInfo);
                             encoderInputBuffer.put(buf, 0, size);
-                            encoder.queueInputBuffer(encoderInputBufferIndex, 0, size, ts, 0);
-                            ts += 33;
+                            encoder.queueInputBuffer(encoderInputBufferIndex, 0, size, sampleInfo.presentationTimeUs, 0);
 
                             //consumed passingbuffer
                             synchronized(mDecoderTrigger) {
@@ -378,8 +296,10 @@ public class FileEncoder extends Thread {
                             //decoder completed.
                             encoderInputBufferIndex = encoder.dequeueInputBuffer(20_000);
                             if(encoderInputBufferIndex >= 0) {
-                                encoderInputBuffer = encoder.getInputBuffer(encoderInputBufferIndex);
+                                encoder.getInputBuffer(encoderInputBufferIndex);
                                 encoder.queueInputBuffer(encoderInputBufferIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+
+                                Log.d("TEST", "Encoder input END");
                             }
                         }
                     }
@@ -392,7 +312,7 @@ public class FileEncoder extends Thread {
                         //consume encoder output
                         Log.d("TEST", "Encoder out : " + bufferInfo.size);
 
-                        if(mMuxerTrack >= 0) {
+                        if(mMuxerTrack >= 0 && bufferInfo.presentationTimeUs > 0) {
                             mMuxer.writeSampleData(mMuxerTrack, encoderOutputBuffer, bufferInfo);
                         }
 

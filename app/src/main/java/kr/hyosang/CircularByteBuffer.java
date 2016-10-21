@@ -1,10 +1,12 @@
 package kr.hyosang;
 
+import android.util.Log;
+
 /**
  * Created by hyosang on 2016. 10. 16..
  */
 
-public class ByteBuffer {
+public class CircularByteBuffer {
     private byte [] buffer;
     private volatile int readStartIndex = -1;
     private volatile int writeStartIndex = 0;
@@ -26,7 +28,7 @@ public class ByteBuffer {
         }
     }
 
-    public ByteBuffer(int size) {
+    public CircularByteBuffer(int size) {
         buffer = new byte[size];
         readStartIndex = -1;
         writeStartIndex = 0;
@@ -120,6 +122,13 @@ public class ByteBuffer {
                     readStartIndex = obtainSize - tailLen;
                 }
             }
+
+            if(readStartIndex == writeStartIndex) {
+                //buffer empty state.
+                readStartIndex = -1;
+                writeStartIndex = 0;
+            }
+
             return obtainSize;
         }
 
